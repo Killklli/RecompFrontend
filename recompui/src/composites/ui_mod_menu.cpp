@@ -317,6 +317,12 @@ void ModMenu::open_install_dialog() {
     });
 }
 
+void ModMenu::open_mod_downloads() {
+    if (mod_downloads_panel) {
+        mod_downloads_panel->show();
+    }
+}
+
 void ModMenu::mod_toggled(bool enabled) {
     if (active_mod_index >= 0) {
         recomp::mods::enable_mod(mod_details[active_mod_index].mod_id, enabled);

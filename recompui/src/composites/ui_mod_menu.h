@@ -5,6 +5,7 @@
 #include "elements/ui_scroll_container.h"
 #include "elements/ui_icon_button.h"
 #include "ui_mod_details_panel.h"
+#include "ui_mod_marketplace.h"
 
 namespace recompui {
 
@@ -85,6 +86,7 @@ private:
     void refresh_mods(bool scan_mods);
     void open_mods_folder();
     void open_install_dialog();
+    void open_mod_downloads();
     void mod_toggled(bool enabled);
     void mod_selected(uint32_t mod_index);
     void mod_dragged(uint32_t mod_index, EventDrag drag);
@@ -106,6 +108,8 @@ private:
     Button *install_mods_button = nullptr;
     IconButton *refresh_button = nullptr;
     Button *mods_folder_button = nullptr;
+    Button *mod_downloads_button = nullptr;
+    ModDownloadsPanel *mod_downloads_panel = nullptr;
     int32_t active_mod_index = -1;
     std::vector<ModEntryButton *> mod_entry_buttons;
     std::vector<ModEntrySpacer *> mod_entry_spacers;
