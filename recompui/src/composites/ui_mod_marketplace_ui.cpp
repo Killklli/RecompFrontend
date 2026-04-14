@@ -761,8 +761,8 @@ namespace recompui
 
         if (!failed && !image_data.empty())
         {
-            // recompui::queue_image_from_bytes_file(thumbnail_src, image_data);
-            // thumbnail_image->set_src(thumbnail_src);
+            recompui::queue_image_from_bytes_file(thumbnail_src, image_data);
+            thumbnail_image->set_src(thumbnail_src);
             thumbnail_image->queue_update();
         }
 
