@@ -3,8 +3,18 @@
 #include <cassert>
 
 namespace recompui {
+
+    void ScrollContainer::set_scroll_callback(std::function<void()> callback) {
+        scroll_callback = std::move(callback);
+    }
+
+    void ScrollContainer::process_event(const Event &e) {
+        if (e.type == EventType::Scroll && scroll_callback) {
+            scroll_callback();
+        }
+    }
     
-    ScrollContainer::ScrollContainer(ResourceId rid, Element *parent, ScrollDirection direction) : Element(rid, parent) {
+    ScrollContainer::ScrollContainer(ResourceId rid, Element *parent, ScrollDirection direction) : Element(rid, parent, Events(EventType::Scroll)) {
         set_flex(1.0f, 1.0f, 100.0f);
         set_width(100.0f, Unit::Percent);
         set_height(100.0f, Unit::Percent);

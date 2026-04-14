@@ -1,5 +1,6 @@
 #include "ui_mod_marketplace.h"
 
+#include <algorithm>
 #include <chrono>
 #include <curl/curl.h>
 #include <filesystem>
@@ -57,6 +58,34 @@ namespace recompui
         return fwrite(contents, size, nmemb, file);
     }
 
+    static size_t write_bytes_callback(void *contents, size_t size, size_t nmemb,
+                                       std::vector<char> *out)
+    {
+        const size_t byte_count = size * nmemb;
+        const char *bytes = static_cast<char *>(contents);
+        out->insert(out->end(), bytes, bytes + byte_count);
+        return byte_count;
+    }
+
+    static std::string append_cache_busting_query(const std::string &url)
+    {
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+        return url + (url.find('?') == std::string::npos ? "?" : "&") +
+               "t=" + std::to_string(now);
+    }
+
+    static curl_slist *make_no_cache_headers()
+    {
+        curl_slist *headers = nullptr;
+        headers = curl_slist_append(
+            headers, "Cache-Control: no-cache, no-store, must-revalidate");
+        headers = curl_slist_append(headers, "Pragma: no-cache");
+        headers = curl_slist_append(headers, "Expires: 0");
+        return headers;
+    }
+
     void curl_global_initialize()
     {
         if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
@@ -68,10 +97,7 @@ namespace recompui
         CurlSession session;
         std::string response;
 
-        auto now = std::chrono::duration_cast<std::chrono::seconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
-        std::string busted_url = url + "?t=" + std::to_string(now);
+        std::string busted_url = append_cache_busting_query(url);
 
         curl_easy_setopt(session.handle, CURLOPT_URL, busted_url.c_str());
         curl_easy_setopt(session.handle, CURLOPT_WRITEFUNCTION,
@@ -79,11 +105,40 @@ namespace recompui
         curl_easy_setopt(session.handle, CURLOPT_WRITEDATA, &response);
         curl_easy_setopt(session.handle, CURLOPT_TIMEOUT, 30L);
 
-        struct curl_slist *headers = nullptr;
-        headers = curl_slist_append(
-            headers, "Cache-Control: no-cache, no-store, must-revalidate");
-        headers = curl_slist_append(headers, "Pragma: no-cache");
-        headers = curl_slist_append(headers, "Expires: 0");
+        struct curl_slist *headers = make_no_cache_headers();
+        curl_easy_setopt(session.handle, CURLOPT_HTTPHEADER, headers);
+
+        CURLcode res = session.perform();
+        curl_slist_free_all(headers);
+
+        if (res != CURLE_OK)
+            throw std::runtime_error(std::string("libcurl error: ") +
+                                     curl_easy_strerror(res));
+
+        long http_code = session.response_code();
+        if (http_code != 200)
+            throw std::runtime_error("HTTP error: " + std::to_string(http_code));
+
+        if (response.empty())
+            throw std::runtime_error("No data received from server");
+
+        return response;
+    }
+
+    std::vector<char> http_fetch_bytes(const std::string &url)
+    {
+        CurlSession session;
+        std::vector<char> response;
+
+        std::string busted_url = append_cache_busting_query(url);
+
+        curl_easy_setopt(session.handle, CURLOPT_URL, busted_url.c_str());
+        curl_easy_setopt(session.handle, CURLOPT_WRITEFUNCTION,
+                         write_bytes_callback);
+        curl_easy_setopt(session.handle, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(session.handle, CURLOPT_TIMEOUT, 30L);
+
+        struct curl_slist *headers = make_no_cache_headers();
         curl_easy_setopt(session.handle, CURLOPT_HTTPHEADER, headers);
 
         CURLcode res = session.perform();

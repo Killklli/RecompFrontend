@@ -647,6 +647,9 @@ void ModMenu::process_event(const Event &e) {
         }
         if (ultramodern::is_game_started()) {
             install_mods_button->set_enabled(false);
+            if (mod_downloads_button != nullptr) {
+                mod_downloads_button->set_enabled(false);
+            }
             refresh_button->set_enabled(false);
         }
         if (active_mod_index != -1) {        
@@ -726,9 +729,18 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
         footer_container->set_border_bottom_right_radius(16.0f);
         {
             Button* configure_button = mod_details_panel->get_configure_button();
+            bool has_marketplace = !get_marketplace_url().empty();
+
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
 
+            if (has_marketplace) {
+                mod_downloads_button = context.create_element<Button>(footer_container, "Mod Marketplace", recompui::ButtonStyle::Primary);
+                mod_downloads_button->add_pressed_callback([this](){ 
+                    printf("Mod Marketplace button pressed\n");
+                    open_mod_downloads(); 
+                });
+            }
             Element* footer_spacer = context.create_element<Element>(footer_container);
             footer_spacer->set_flex(1.0f, 0.0f);
 
@@ -744,6 +756,11 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
     mod_entry_floating_view->set_display(Display::None);
     mod_entry_floating_view->set_position(Position::Absolute);
     mod_entry_floating_view->set_selected(true);
+
+    // Create the mod marketplace panel
+    printf("Creating mod marketplace panel\n");
+    mod_downloads_panel = context.create_element<ModDownloadsPanel>(this);
+    printf("Mod marketplace panel created: %p\n", mod_downloads_panel);
 
     context.close();
     create_mod_config_modal();

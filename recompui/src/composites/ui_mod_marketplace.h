@@ -7,9 +7,11 @@
 #include "elements/ui_image.h"
 #include "elements/ui_label.h"
 #include "elements/ui_scroll_container.h"
+#include "elements/ui_text_input.h"
 
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -21,6 +23,7 @@ namespace recompui
     std::string get_marketplace_url();
     void curl_global_initialize();
     std::string http_fetch_string(const std::string &url);
+    std::vector<char> http_fetch_bytes(const std::string &url);
     void http_download_to_file(const std::string &url,
                                const std::string &output_path);
     std::vector<char> decode_base64(const std::string &encoded);
@@ -44,21 +47,27 @@ namespace recompui
         std::string short_description;
         std::string file_url;
         std::string thumbnail_image;
+        std::string thumbnail_url;
         std::string version;
         std::string id;
         std::string game_id;
         std::vector<std::string> dependencies;
     };
 
+    struct AsyncThumbnailLoadState;
+
     class ModMarketplaceEntry : public Element
     {
     public:
         MarketplaceMod mod_data;
-        ModMarketplaceEntry(Element *parent, const MarketplaceMod &mod_data);
+        ModMarketplaceEntry(ResourceId rid, Element *parent, const MarketplaceMod &mod_data);
         virtual ~ModMarketplaceEntry();
         void
         set_download_callback(std::function<void(const MarketplaceMod &)> callback);
+        bool update_thumbnail_load(ScrollContainer *viewport);
+        bool start_thumbnail_load_if_visible(ScrollContainer *viewport);
         void update_install_status(ModInstallStatus status);
+        bool process_thumbnail_load();
         Button *get_download_button() { return download_button; }
 
     protected:
@@ -66,18 +75,28 @@ namespace recompui
         void process_event(const Event &e) override;
 
     private:
+        void init_thumbnail_image();
+        void begin_thumbnail_url_load();
+        bool try_apply_loaded_thumbnail();
+        bool is_visible_in_viewport(ScrollContainer *viewport) const;
+        bool has_thumbnail_work_remaining() const;
+
         Container *entry_container = nullptr;
         Image *thumbnail_image = nullptr;
         Label *name_label = nullptr;
         Label *description_label = nullptr;
         Button *download_button = nullptr;
+        std::shared_ptr<AsyncThumbnailLoadState> thumbnail_load_state;
+        bool thumbnail_load_started = false;
+        bool thumbnail_load_finished = false;
+        std::string thumbnail_src;
         std::function<void(const MarketplaceMod &)> download_callback;
     };
 
     class ModDownloadsPanel : public Element
     {
     public:
-        ModDownloadsPanel(Element *parent);
+        ModDownloadsPanel(ResourceId rid, Element *parent);
         virtual ~ModDownloadsPanel();
         void show();
         void hide();
@@ -89,6 +108,7 @@ namespace recompui
 
     private:
         void load_marketplace_mods(const std::vector<MarketplaceMod> &mods);
+        void refresh_marketplace_mods();
         void download_mod(const MarketplaceMod &mod);
         std::string fetch_json_from_url(const std::string &url);
         std::vector<MarketplaceMod>
@@ -113,12 +133,18 @@ namespace recompui
         Container *content_panel = nullptr;
         Label *title_label = nullptr;
         Label *status_label = nullptr;
+        TextInput *search_input = nullptr;
+        Button *sort_name_button = nullptr;
         ScrollContainer *mod_list_container = nullptr;
         Button *refresh_button = nullptr;
         Button *close_button = nullptr;
         std::vector<ModMarketplaceEntry *> mod_entries;
         std::vector<MarketplaceMod> fetched_mods;
+        std::string name_search_query;
+        bool sort_name_ascending = true;
         std::string fetch_error;
+        bool thumbnail_viewport_dirty = false;
+        int thumbnail_viewport_retry_frames = 0;
         bool is_visible = false;
         bool is_loading = false;
         bool fetch_completed = false;
