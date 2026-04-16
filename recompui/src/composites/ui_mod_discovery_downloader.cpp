@@ -1,16 +1,16 @@
 #include "librecomp/mods.hpp"
 #include "recompui/recompui.h"
 #include "ui_mod_installer.h"
-#include "ui_mod_marketplace.h"
+#include "ui_mod_discovery.h"
 #include <algorithm>
 #include <filesystem>
 
 namespace recompui
 {
 
-    // Gets all marketplace mods where the mod id matches for the game
-    const MarketplaceMod *
-    ModDownloadsPanel::find_marketplace_mod_by_id(const std::string &mod_id) const
+    // Gets all discovery mods where the mod id matches for the game
+    const DiscoveryMod *
+    ModDownloadsPanel::find_discovery_mod_by_id(const std::string &mod_id) const
     {
         for (const auto &m : fetched_mods)
         {
@@ -20,9 +20,9 @@ namespace recompui
         return nullptr;
     }
 
-    // Download and install a mod from the marketplace
+    // Download and install a mod from the discovery
     bool ModDownloadsPanel::install_single_mod_file(
-        const MarketplaceMod &mod, std::vector<std::string> &out_errors)
+        const DiscoveryMod &mod, std::vector<std::string> &out_errors)
     {
         // If theres no download URL just throw out a message, because something
         // upstream went wrong
@@ -92,7 +92,7 @@ namespace recompui
 
     // Resolves and installs dependencies recursively before target install.
     void ModDownloadsPanel::resolve_and_install_dependencies(
-        const MarketplaceMod &mod, std::unordered_set<std::string> &visited_ids,
+        const DiscoveryMod &mod, std::unordered_set<std::string> &visited_ids,
         std::vector<std::string> &out_warnings,
         std::vector<std::string> &out_errors,
         std::vector<std::string> &out_installed_deps)
@@ -105,7 +105,7 @@ namespace recompui
             if (dep_id.empty() || visited_ids.count(dep_id))
                 continue;
 
-            MarketplaceMod dummy_dep;
+            DiscoveryMod dummy_dep;
             dummy_dep.id = dep_id;
             dummy_dep.version = required_version;
             // Check if we already have it installed, and that it satisfies the required version, if we do then we can skip trying to install it.
@@ -119,17 +119,17 @@ namespace recompui
                     continue;
                 }
             }
-            // If we don't have the mod or its too old on the marketplace just warn the user we can't install it.
-            const MarketplaceMod *dep_mod = find_marketplace_mod_by_id(dep_id);
+            // If we don't have the mod or its too old on the discovery just warn the user we can't install it.
+            const DiscoveryMod *dep_mod = find_discovery_mod_by_id(dep_id);
             if (!dep_mod)
             {
                 out_warnings.push_back(
                     "Dependency '" + dep_id + "' required by '" + mod.name +
-                    "' was not found in the marketplace and must be installed manually.");
+                    "' was not found in the discovery and must be installed manually.");
                 continue;
             }
 
-            // If its on the marketplace but its the wrong version, just throw out some warnings based on if its new or not.
+            // If its on the discovery but its the wrong version, just throw out some warnings based on if its new or not.
             if (!required_version.empty() && !dep_mod->version.empty())
             {
                 int cmp = compare_versions(dep_mod->version, required_version);
@@ -137,7 +137,7 @@ namespace recompui
                 {
                     out_warnings.push_back(
                         "Dependency '" + dep_mod->name + "' requires v" + required_version +
-                        " but the marketplace only has v" + dep_mod->version +
+                        " but the discovery only has v" + dep_mod->version +
                         ". Skipping auto-install; please install it manually.");
                     continue;
                 }
@@ -145,7 +145,7 @@ namespace recompui
                 {
                     out_warnings.push_back(
                         "Dependency '" + dep_mod->name + "' requires v" + required_version +
-                        " but the marketplace has a newer version v" + dep_mod->version +
+                        " but the discovery has a newer version v" + dep_mod->version +
                         ". Installing the newer version.");
                 }
             }
@@ -168,9 +168,7 @@ namespace recompui
             {
                 out_installed_deps.push_back(dep_mod->name);
 
-                for (ModMarketplaceEntry *entry : mod_entries)
-                {
-                    if (entry->mod_data.id == dep_mod->id)
+                for (ModDiscoveryEntry *entry : mod_entries)
                     {
                         entry->update_install_status(ModInstallStatus::Installed);
                         entry->queue_update();
@@ -179,10 +177,9 @@ namespace recompui
                 }
             }
         }
-    }
 
     // On mod download button click
-    void ModDownloadsPanel::download_mod(const MarketplaceMod &mod)
+    void ModDownloadsPanel::download_mod(const DiscoveryMod &mod)
     {
         if (mod.file_url.empty())
         {
@@ -192,8 +189,8 @@ namespace recompui
 
         status_label->set_text("Downloading " + mod.name + "...");
 
-        ModMarketplaceEntry *downloading_entry = nullptr;
-        for (ModMarketplaceEntry *entry : mod_entries)
+        ModDiscoveryEntry *downloading_entry = nullptr;
+        for (ModDiscoveryEntry *entry : mod_entries)
         {
             if (entry->mod_data.id == mod.id && entry->mod_data.name == mod.name)
             {
@@ -254,7 +251,7 @@ namespace recompui
                 downloading_entry->queue_update();
             }
 
-            for (ModMarketplaceEntry *entry : mod_entries)
+            for (ModDiscoveryEntry *entry : mod_entries)
             {
                 if (entry == downloading_entry)
                     continue;
@@ -288,7 +285,7 @@ namespace recompui
     }
 
     // Checks if a mod is currently installed locally.
-    bool ModDownloadsPanel::is_mod_installed(const MarketplaceMod &mod)
+    bool ModDownloadsPanel::is_mod_installed(const DiscoveryMod &mod)
     {
         if (mod.id.empty())
             return false;
@@ -297,7 +294,7 @@ namespace recompui
 
     // Gets the installed version string for a mod identifier.
     std::string
-    ModDownloadsPanel::get_installed_mod_version(const MarketplaceMod &mod)
+    ModDownloadsPanel::get_installed_mod_version(const DiscoveryMod &mod)
     {
         if (mod.id.empty())
             return {};
@@ -308,7 +305,7 @@ namespace recompui
 
     // Wrapper that checks all our installed mod status'
     ModInstallStatus
-    ModDownloadsPanel::get_mod_install_status(const MarketplaceMod &mod)
+    ModDownloadsPanel::get_mod_install_status(const DiscoveryMod &mod)
     {
         if (!is_mod_installed(mod))
             return check_dependencies_satisfiable(mod)
@@ -329,7 +326,7 @@ namespace recompui
 
     // Determines whether all dependencies can be satisfied.
     bool ModDownloadsPanel::check_dependencies_satisfiable(
-        const MarketplaceMod &mod) const
+        const DiscoveryMod &mod) const
     {
         for (const std::string &dep_str : mod.dependencies)
         {
@@ -352,7 +349,7 @@ namespace recompui
                     continue;
             }
 
-            const MarketplaceMod *dep_mod = find_marketplace_mod_by_id(dep_id);
+            const DiscoveryMod *dep_mod = find_discovery_mod_by_id(dep_id);
             if (!dep_mod)
                 return false;
 

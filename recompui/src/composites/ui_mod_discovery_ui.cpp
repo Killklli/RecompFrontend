@@ -1,5 +1,5 @@
 #include "../../../lib/N64ModernRuntime/N64Recomp/lib/tomlplusplus/vendor/json.hpp"
-#include "./ui_mod_marketplace.h"
+#include "./ui_mod_discovery.h"
 #include "librecomp/game.hpp"
 #include "recompui/recompui.h"
 #include "ui_utils.h"
@@ -23,7 +23,7 @@ namespace
         return value;
     }
 
-    bool mod_name_matches_query(const recompui::MarketplaceMod &mod,
+    bool mod_name_matches_query(const recompui::DiscoveryMod &mod,
                                 const std::string &query)
     {
         if (query.empty())
@@ -37,16 +37,16 @@ namespace
 
 namespace recompui
 {
-    // Gets the URL for the marketplace so we can determine if we have to render the
+    // Gets the URL for the discovery so we can determine if we have to render the
     // button for the UI
-    std::string get_marketplace_url()
+    std::string get_discovery_url()
     {
-        return supported_games.empty() ? "" : supported_games[0].marketplace_url;
+        return supported_games.empty() ? "" : supported_games[0].discovery_url;
     }
 
     // Each Mod Entry on the UI
-    ModMarketplaceEntry::ModMarketplaceEntry(ResourceId rid, Element *parent,
-                                             const MarketplaceMod &mod_data)
+    ModDiscoveryEntry::ModDiscoveryEntry(ResourceId rid, Element *parent,
+                                             const DiscoveryMod &mod_data)
                 : Element(rid, parent, Events(EventType::Click)),
                     mod_data(mod_data)
     {
@@ -113,17 +113,17 @@ namespace recompui
       download_callback(this->mod_data); });
     }
 
-    ModMarketplaceEntry::~ModMarketplaceEntry() {}
+    ModDiscoveryEntry::~ModDiscoveryEntry() {}
 
     // Sets the callback for the click event
-    void ModMarketplaceEntry::set_download_callback(
-        std::function<void(const MarketplaceMod &)> callback)
+    void ModDiscoveryEntry::set_download_callback(
+        std::function<void(const DiscoveryMod &)> callback)
     {
         download_callback = callback;
     }
 
     // Sets the status for the downlaod button based on the mod state.
-    void ModMarketplaceEntry::update_install_status(ModInstallStatus status)
+    void ModDiscoveryEntry::update_install_status(ModInstallStatus status)
     {
         switch (status)
         {
@@ -161,12 +161,12 @@ namespace recompui
         queue_update();
     }
 
-    void ModMarketplaceEntry::process_event(const Event &e)
+    void ModDiscoveryEntry::process_event(const Event &e)
     {
         (void)e;
     }
 
-    // Initializes the marketplace modal panel and child controls.
+    // Initializes the discovery modal panel and child controls.
     ModDownloadsPanel::ModDownloadsPanel(ResourceId rid, Element *parent)
         : Element(rid, parent, Events(EventType::Update))
     {
@@ -204,13 +204,13 @@ namespace recompui
         header_container->set_margin_bottom(12.0f);
 
         title_label = context.create_element<Label>(
-            header_container, "Mod Marketplace", LabelStyle::Large);
+            header_container, "Mod Discovery", LabelStyle::Large);
         title_label->set_color(Color{242, 242, 242, 255});
 
         refresh_button = context.create_element<Button>(header_container, "Refresh",
                                                         ButtonStyle::Secondary);
         refresh_button->add_pressed_callback([this]()
-                                             { fetch_marketplace_data(); });
+                                             { fetch_discovery_data(); });
 
         // Filter row: search label + input on the left, sort button on the right
         Container *filter_container = context.create_element<Container>(
@@ -238,7 +238,7 @@ namespace recompui
             [this](const std::string &text)
             {
                 name_search_query = text;
-                refresh_marketplace_mods();
+                refresh_discovery_mods();
             });
 
         // Right side: sort toggle button
@@ -253,11 +253,11 @@ namespace recompui
                                                        sort_name_ascending
                                                            ? "Name (A\u2192Z)"
                                                            : "Name (Z\u2192A)");
-                                                   refresh_marketplace_mods();
+                                                   refresh_discovery_mods();
                                                });
 
         status_label = context.create_element<Label>(
-            content_panel, "Loading marketplace data...", LabelStyle::Normal);
+            content_panel, "Loading discovery data...", LabelStyle::Normal);
         status_label->set_color(Color{204, 204, 204, 255});
         status_label->set_text_align(TextAlign::Center);
 
@@ -302,7 +302,7 @@ namespace recompui
     {
         set_display(Display::Flex);
         is_visible = true;
-        fetch_marketplace_data();
+        fetch_discovery_data();
         close_button->focus();
     }
 
@@ -313,53 +313,53 @@ namespace recompui
         is_visible = false;
     }
 
-    // Fetches marketplace JSON and refreshes rendered entries.
-    void ModDownloadsPanel::fetch_marketplace_data()
+    // Fetches discovery JSON and refreshes rendered entries.
+    void ModDownloadsPanel::fetch_discovery_data()
     {
         if (is_loading)
             return;
 
         is_loading = true;
-        status_label->set_text("Loading marketplace data...");
+        status_label->set_text("Loading discovery data...");
         mod_list_container->clear_children();
         mod_entries.clear();
 
         try
         {
-            std::string marketplace_url = get_marketplace_url();
-            if (marketplace_url.empty())
-                throw std::runtime_error("No marketplace URL configured for this game");
-            std::string json_data = http_fetch_string(marketplace_url);
+            std::string discovery_url = get_discovery_url();
+            if (discovery_url.empty())
+                throw std::runtime_error("No discovery URL configured for this game");
+            std::string json_data = http_fetch_string(discovery_url);
             printf("[ModDownloads] JSON response:\n%s\n", json_data.c_str());
-            std::vector<MarketplaceMod> mods = parse_marketplace_json(json_data);
+            std::vector<DiscoveryMod> mods = parse_discovery_json(json_data);
             fetched_mods = mods;
-            load_marketplace_mods(fetched_mods);
+            load_discovery_mods(fetched_mods);
         }
         catch (const std::exception &e)
         {
-            status_label->set_text("Failed to load marketplace data: " +
+            status_label->set_text("Failed to load discovery data: " +
                                    std::string(e.what()));
         }
 
         is_loading = false;
     }
 
-    void ModDownloadsPanel::refresh_marketplace_mods()
+    void ModDownloadsPanel::refresh_discovery_mods()
     {
         if (is_loading)
             return;
 
-        load_marketplace_mods(fetched_mods);
+        load_discovery_mods(fetched_mods);
     }
 
-    // Parses marketplace JSON payload into mod metadata entries.
-    std::vector<MarketplaceMod>
-    ModDownloadsPanel::parse_marketplace_json(const std::string &json_data)
+    // Parses discovery JSON payload into mod metadata entries.
+    std::vector<DiscoveryMod>
+    ModDownloadsPanel::parse_discovery_json(const std::string &json_data)
     {
         if (json_data.empty())
             throw std::runtime_error("Empty JSON data received");
 
-        std::vector<MarketplaceMod> mods;
+        std::vector<DiscoveryMod> mods;
 
         try
         {
@@ -370,7 +370,7 @@ namespace recompui
 
             for (auto &[mod_name, mod_info] : j.items())
             {
-                MarketplaceMod mod;
+                DiscoveryMod mod;
                 mod.name = mod_name;
 
                 auto try_get = [&](const char *key, std::string &field)
@@ -408,9 +408,9 @@ namespace recompui
         return mods;
     }
 
-    // Loads filtered marketplace mods into the ui
-    void ModDownloadsPanel::load_marketplace_mods(
-        const std::vector<MarketplaceMod> &mods)
+    // Loads filtered discovery mods into the ui
+    void ModDownloadsPanel::load_discovery_mods(
+        const std::vector<DiscoveryMod> &mods)
     {
         ContextId context = get_current_context();
 
@@ -419,14 +419,14 @@ namespace recompui
 
         if (mods.empty())
         {
-            status_label->set_text("No mods available in marketplace");
+            status_label->set_text("No mods available in discovery");
             return;
         }
 
         std::string current_game_id =
             supported_games.empty() ? "" : supported_games[0].mod_game_id;
 
-        std::vector<MarketplaceMod> filtered_mods;
+        std::vector<DiscoveryMod> filtered_mods;
         for (const auto &mod : mods)
         {
             if ((mod.game_id.empty() || mod.game_id == current_game_id) &&
@@ -435,7 +435,7 @@ namespace recompui
         }
 
         std::sort(filtered_mods.begin(), filtered_mods.end(),
-                  [this](const MarketplaceMod &a, const MarketplaceMod &b)
+                  [this](const DiscoveryMod &a, const DiscoveryMod &b)
                   {
                       const std::string a_lower = to_lower_copy(a.name);
                       const std::string b_lower = to_lower_copy(b.name);
@@ -452,7 +452,7 @@ namespace recompui
             if (name_search_query.empty())
             {
                 status_label->set_text(
-                    "No mods available for this game in marketplace");
+                    "No mods available for this game in discovery");
             }
             else
             {
@@ -463,16 +463,16 @@ namespace recompui
         }
 
         status_label->set_text("Found " + std::to_string(filtered_mods.size()) +
-                               " mod(s) in marketplace");
+                               " mod(s) in discovery");
 
         for (const auto &mod : filtered_mods)
         {
             try
             {
-                ModMarketplaceEntry *entry =
-                    context.create_element<ModMarketplaceEntry>(mod_list_container, mod);
+                ModDiscoveryEntry *entry =
+                    context.create_element<ModDiscoveryEntry>(mod_list_container, mod);
                 entry->set_download_callback(
-                    [this](const MarketplaceMod &m)
+                    [this](const DiscoveryMod &m)
                     { download_mod(m); });
                 entry->update_install_status(get_mod_install_status(mod));
                 entry->get_download_button()->set_nav_none(NavDirection::Left);
@@ -506,7 +506,7 @@ namespace recompui
             return;
 
         bool has_pending_thumbnail_loads = false;
-        for (ModMarketplaceEntry *entry : mod_entries)
+        for (ModDiscoveryEntry *entry : mod_entries)
         {
             if (entry != nullptr && entry->update_thumbnail_load(mod_list_container))
                 has_pending_thumbnail_loads = true;
@@ -519,7 +519,7 @@ namespace recompui
             constexpr size_t max_starts_per_scan = 12;
             size_t started_this_scan = 0;
 
-            for (ModMarketplaceEntry *entry : mod_entries)
+            for (ModDiscoveryEntry *entry : mod_entries)
             {
                 if (entry == nullptr)
                     continue;
@@ -545,7 +545,7 @@ namespace recompui
             queue_update();
     }
 
-    // Creates an Rml host element for the marketplace modal container
+    // Creates an Rml host element for the discovery modal container
     ElementModDownloads::ElementModDownloads(const Rml::String &tag)
         : Rml::Element(tag)
     {
@@ -579,13 +579,13 @@ namespace
     };
 
     // Main Handler for loading thumbnails, honestly I really don't like this code and would love a refactor here
-    class MarketplaceThumbnailLoader
+    class DiscoveryThumbnailLoader
     {
     public:
         // Gets the instance
-        static MarketplaceThumbnailLoader &instance()
+        static DiscoveryThumbnailLoader &instance()
         {
-            static MarketplaceThumbnailLoader loader;
+            static DiscoveryThumbnailLoader loader;
             return loader;
         }
 
@@ -602,7 +602,7 @@ namespace
 
     private:
         // Uses a pool of worker threads to process thumbnail load tasks in the background
-        MarketplaceThumbnailLoader()
+        DiscoveryThumbnailLoader()
         {
             unsigned int worker_count = std::thread::hardware_concurrency();
             if (worker_count == 0)
@@ -617,7 +617,7 @@ namespace
             }
         }
 
-        ~MarketplaceThumbnailLoader()
+        ~DiscoveryThumbnailLoader()
         {
             {
                 std::lock_guard<std::mutex> lock(queue_mutex);
@@ -679,22 +679,22 @@ namespace
         bool stopping = false;
     };
     // Sets the thumbnail source using the url data
-    std::string make_marketplace_thumbnail_src(
-        const recompui::MarketplaceMod &mod_data)
+    std::string make_discovery_thumbnail_src(
+        const recompui::DiscoveryMod &mod_data)
     {
         const std::string cache_key = !mod_data.id.empty()
                                           ? mod_data.id
                                           : (!mod_data.thumbnail_url.empty()
                                                  ? mod_data.thumbnail_url
                                                  : mod_data.name);
-        return "marketplace_thumb_" +
+        return "discovery_thumb_" +
                std::to_string(std::hash<std::string>{}(cache_key));
     }
 } // namespace
 
 namespace recompui
 {
-    void ModMarketplaceEntry::init_thumbnail_image()
+    void ModDiscoveryEntry::init_thumbnail_image()
     {
         // if we actually have a thumbnail, check if its base64 and if we need to
         // decode it or not.
@@ -705,7 +705,7 @@ namespace recompui
                     0, std::char_traits<char>::length(data_image_prefix),
                     data_image_prefix) == 0)
             {
-                thumbnail_src = make_marketplace_thumbnail_src(mod_data);
+                thumbnail_src = make_discovery_thumbnail_src(mod_data);
                 std::vector<char> image_data = decode_base64(mod_data.thumbnail_image);
                 if (!image_data.empty())
                 {
@@ -721,21 +721,21 @@ namespace recompui
     }
 
     // Adds the url load to the queue
-    void ModMarketplaceEntry::begin_thumbnail_url_load()
+    void ModDiscoveryEntry::begin_thumbnail_url_load()
     {
         if (!thumbnail_load_started && !thumbnail_load_finished &&
             !mod_data.thumbnail_url.empty())
         {
             thumbnail_load_started = true;
-            thumbnail_src = make_marketplace_thumbnail_src(mod_data);
+            thumbnail_src = make_discovery_thumbnail_src(mod_data);
             thumbnail_load_state = std::make_shared<AsyncThumbnailLoadState>();
-            MarketplaceThumbnailLoader::instance().enqueue(mod_data.thumbnail_url,
+            DiscoveryThumbnailLoader::instance().enqueue(mod_data.thumbnail_url,
                                                            thumbnail_load_state);
         }
     }
 
     // If the thumbnail is loaded, apply it to the UI
-    bool ModMarketplaceEntry::try_apply_loaded_thumbnail()
+    bool ModDiscoveryEntry::try_apply_loaded_thumbnail()
     {
         if (!thumbnail_load_state)
             return true;
@@ -770,7 +770,7 @@ namespace recompui
     }
 
     // Checks if we need to apply a loaded thumbnail to the UI
-    bool ModMarketplaceEntry::process_thumbnail_load()
+    bool ModDiscoveryEntry::process_thumbnail_load()
     {
         if (!thumbnail_load_state)
             return false;
@@ -779,7 +779,7 @@ namespace recompui
     }
 
     // Gets the list of mods that are visible in the current scrollbar
-    bool ModMarketplaceEntry::is_visible_in_viewport(ScrollContainer *viewport) const
+    bool ModDiscoveryEntry::is_visible_in_viewport(ScrollContainer *viewport) const
     {
         if (viewport == nullptr)
             return false;
@@ -793,13 +793,13 @@ namespace recompui
     }
 
     // Status check to validate if everythings loaded
-    bool ModMarketplaceEntry::has_thumbnail_work_remaining() const
+    bool ModDiscoveryEntry::has_thumbnail_work_remaining() const
     {
         return !mod_data.thumbnail_url.empty() && !thumbnail_load_finished;
     }
 
     // Checks if we can update the load based on the scroll position
-    bool ModMarketplaceEntry::update_thumbnail_load(ScrollContainer *viewport)
+    bool ModDiscoveryEntry::update_thumbnail_load(ScrollContainer *viewport)
     {
         if (thumbnail_load_state)
             return !try_apply_loaded_thumbnail();
@@ -808,7 +808,7 @@ namespace recompui
     }
 
     // Starts the thumbnail load if we are visible in the viewport and we haven't started loading yet
-    bool ModMarketplaceEntry::start_thumbnail_load_if_visible(
+    bool ModDiscoveryEntry::start_thumbnail_load_if_visible(
         ScrollContainer *viewport)
     {
         if (!thumbnail_load_started && has_thumbnail_work_remaining() &&

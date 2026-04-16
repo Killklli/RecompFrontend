@@ -1,4 +1,4 @@
-#include "ui_mod_marketplace.h"
+#include "ui_mod_discovery.h"
 
 #include <algorithm>
 #include <chrono>

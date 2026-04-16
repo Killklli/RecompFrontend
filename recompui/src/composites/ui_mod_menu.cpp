@@ -729,15 +729,15 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
         footer_container->set_border_bottom_right_radius(16.0f);
         {
             Button* configure_button = mod_details_panel->get_configure_button();
-            bool has_marketplace = !get_marketplace_url().empty();
+            bool has_discovery = !get_discovery_url().empty();
 
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
 
-            if (has_marketplace) {
-                mod_downloads_button = context.create_element<Button>(footer_container, "Mod Marketplace", recompui::ButtonStyle::Primary);
+            if (has_discovery) {
+                mod_downloads_button = context.create_element<Button>(footer_container, "Mod Discovery", recompui::ButtonStyle::Primary);
                 mod_downloads_button->add_pressed_callback([this](){ 
-                    printf("Mod Marketplace button pressed\n");
+                    printf("Mod Discovery button pressed\n");
                     open_mod_downloads(); 
                 });
             }
@@ -757,10 +757,10 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
     mod_entry_floating_view->set_position(Position::Absolute);
     mod_entry_floating_view->set_selected(true);
 
-    // Create the mod marketplace panel
-    printf("Creating mod marketplace panel\n");
+    // Create the mod discovery panel
+    printf("Creating mod discovery panel\n");
     mod_downloads_panel = context.create_element<ModDownloadsPanel>(this);
-    printf("Mod marketplace panel created: %p\n", mod_downloads_panel);
+    printf("Mod discovery panel created: %p\n", mod_downloads_panel);
 
     context.close();
     create_mod_config_modal();

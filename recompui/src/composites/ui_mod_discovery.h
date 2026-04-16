@@ -1,5 +1,5 @@
-#ifndef RECOMPUI_MOD_MARKETPLACE_H
-#define RECOMPUI_MOD_MARKETPLACE_H
+#ifndef RECOMPUI_MOD_DISCOVERY_H
+#define RECOMPUI_MOD_DISCOVERY_H
 
 #include "elements/ui_button.h"
 #include "elements/ui_container.h"
@@ -20,7 +20,7 @@
 namespace recompui
 {
 
-    std::string get_marketplace_url();
+    std::string get_discovery_url();
     void curl_global_initialize();
     std::string http_fetch_string(const std::string &url);
     std::vector<char> http_fetch_bytes(const std::string &url);
@@ -41,7 +41,7 @@ namespace recompui
         MissingDependencies
     };
 
-    struct MarketplaceMod
+    struct DiscoveryMod
     {
         std::string name;
         std::string short_description;
@@ -56,14 +56,14 @@ namespace recompui
 
     struct AsyncThumbnailLoadState;
 
-    class ModMarketplaceEntry : public Element
+    class ModDiscoveryEntry : public Element
     {
     public:
-        MarketplaceMod mod_data;
-        ModMarketplaceEntry(ResourceId rid, Element *parent, const MarketplaceMod &mod_data);
-        virtual ~ModMarketplaceEntry();
+        DiscoveryMod mod_data;
+        ModDiscoveryEntry(ResourceId rid, Element *parent, const DiscoveryMod &mod_data);
+        virtual ~ModDiscoveryEntry();
         void
-        set_download_callback(std::function<void(const MarketplaceMod &)> callback);
+        set_download_callback(std::function<void(const DiscoveryMod &)> callback);
         bool update_thumbnail_load(ScrollContainer *viewport);
         bool start_thumbnail_load_if_visible(ScrollContainer *viewport);
         void update_install_status(ModInstallStatus status);
@@ -71,7 +71,7 @@ namespace recompui
         Button *get_download_button() { return download_button; }
 
     protected:
-        std::string_view get_type_name() override { return "ModMarketplaceEntry"; }
+        std::string_view get_type_name() override { return "ModDiscoveryEntry"; }
         void process_event(const Event &e) override;
 
     private:
@@ -90,7 +90,7 @@ namespace recompui
         bool thumbnail_load_started = false;
         bool thumbnail_load_finished = false;
         std::string thumbnail_src;
-        std::function<void(const MarketplaceMod &)> download_callback;
+        std::function<void(const DiscoveryMod &)> download_callback;
     };
 
     class ModDownloadsPanel : public Element
@@ -100,31 +100,31 @@ namespace recompui
         virtual ~ModDownloadsPanel();
         void show();
         void hide();
-        void fetch_marketplace_data();
+        void fetch_discovery_data();
 
     protected:
         std::string_view get_type_name() override { return "ModDownloadsPanel"; }
         void process_event(const Event &e) override;
 
     private:
-        void load_marketplace_mods(const std::vector<MarketplaceMod> &mods);
-        void refresh_marketplace_mods();
-        void download_mod(const MarketplaceMod &mod);
+        void load_discovery_mods(const std::vector<DiscoveryMod> &mods);
+        void refresh_discovery_mods();
+        void download_mod(const DiscoveryMod &mod);
         std::string fetch_json_from_url(const std::string &url);
-        std::vector<MarketplaceMod>
-        parse_marketplace_json(const std::string &json_data);
+        std::vector<DiscoveryMod>
+        parse_discovery_json(const std::string &json_data);
         void download_file_from_url(const std::string &url,
                                     const std::string &output_path);
-        bool is_mod_installed(const MarketplaceMod &mod);
-        ModInstallStatus get_mod_install_status(const MarketplaceMod &mod);
-        std::string get_installed_mod_version(const MarketplaceMod &mod);
-        bool check_dependencies_satisfiable(const MarketplaceMod &mod) const;
-        const MarketplaceMod *
-        find_marketplace_mod_by_id(const std::string &mod_id) const;
-        bool install_single_mod_file(const MarketplaceMod &mod,
+        bool is_mod_installed(const DiscoveryMod &mod);
+        ModInstallStatus get_mod_install_status(const DiscoveryMod &mod);
+        std::string get_installed_mod_version(const DiscoveryMod &mod);
+        bool check_dependencies_satisfiable(const DiscoveryMod &mod) const;
+        const DiscoveryMod *
+        find_discovery_mod_by_id(const std::string &mod_id) const;
+        bool install_single_mod_file(const DiscoveryMod &mod,
                                      std::vector<std::string> &out_errors);
         void resolve_and_install_dependencies(
-            const MarketplaceMod &mod, std::unordered_set<std::string> &visited_ids,
+            const DiscoveryMod &mod, std::unordered_set<std::string> &visited_ids,
             std::vector<std::string> &out_warnings,
             std::vector<std::string> &out_errors,
             std::vector<std::string> &out_installed_deps);
@@ -138,8 +138,8 @@ namespace recompui
         ScrollContainer *mod_list_container = nullptr;
         Button *refresh_button = nullptr;
         Button *close_button = nullptr;
-        std::vector<ModMarketplaceEntry *> mod_entries;
-        std::vector<MarketplaceMod> fetched_mods;
+        std::vector<ModDiscoveryEntry *> mod_entries;
+        std::vector<DiscoveryMod> fetched_mods;
         std::string name_search_query;
         bool sort_name_ascending = true;
         std::string fetch_error;

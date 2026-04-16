@@ -5,7 +5,7 @@
 #include "elements/ui_scroll_container.h"
 #include "elements/ui_icon_button.h"
 #include "ui_mod_details_panel.h"
-#include "ui_mod_marketplace.h"
+#include "ui_mod_discovery.h"
 
 namespace recompui {
 
