@@ -37,7 +37,6 @@ namespace recompui {
         Navigate,
         MouseButton,
         MenuAction,
-        Scroll,
         Count
     };
 

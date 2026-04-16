@@ -119,10 +119,6 @@ void Element::register_event_listeners(uint32_t events_enabled) {
     if (events_enabled & Events(EventType::Navigate, EventType::MenuAction)) {
         base->AddEventListener(Rml::EventId::Keydown, this);
     }
-
-    if (events_enabled & Events(EventType::Scroll)) {
-        base->AddEventListener(Rml::EventId::Scroll, this);
-    }
 }
 
 void Element::apply_style(Style *style) {
@@ -273,12 +269,6 @@ void Element::ProcessEvent(Rml::Event &event) {
     case Rml::EventId::Drag:
         handle_event(Event::drag_event(event.GetParameter("mouse_x", 0.0f), event.GetParameter("mouse_y", 0.0f), DragPhase::Move));
         break;
-    case Rml::EventId::Scroll: {
-            Event e;
-            e.type = EventType::Scroll;
-            process_event(e);
-            break;
-        }
     default:
         break;
     }
