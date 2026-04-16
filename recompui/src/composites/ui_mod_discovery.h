@@ -54,41 +54,29 @@ namespace recompui
         std::vector<std::string> dependencies;
     };
 
-    struct AsyncThumbnailLoadState;
-
     class ModDiscoveryEntry : public Element
     {
     public:
         DiscoveryMod mod_data;
         ModDiscoveryEntry(ResourceId rid, Element *parent, const DiscoveryMod &mod_data);
         virtual ~ModDiscoveryEntry();
-        void
-        set_download_callback(std::function<void(const DiscoveryMod &)> callback);
-        bool update_thumbnail_load(ScrollContainer *viewport);
-        bool start_thumbnail_load_if_visible(ScrollContainer *viewport);
+        void set_download_callback(std::function<void(const DiscoveryMod &)> callback);
         void update_install_status(ModInstallStatus status);
-        bool process_thumbnail_load();
         Button *get_download_button() { return download_button; }
 
     protected:
         std::string_view get_type_name() override { return "ModDiscoveryEntry"; }
-        void process_event(const Event &e) override;
 
     private:
         void init_thumbnail_image();
         void begin_thumbnail_url_load();
-        bool try_apply_loaded_thumbnail();
-        bool is_visible_in_viewport(ScrollContainer *viewport) const;
-        bool has_thumbnail_work_remaining() const;
 
         Container *entry_container = nullptr;
         Image *thumbnail_image = nullptr;
         Label *name_label = nullptr;
         Label *description_label = nullptr;
         Button *download_button = nullptr;
-        std::shared_ptr<AsyncThumbnailLoadState> thumbnail_load_state;
         bool thumbnail_load_started = false;
-        bool thumbnail_load_finished = false;
         std::string thumbnail_src;
         std::function<void(const DiscoveryMod &)> download_callback;
     };
@@ -104,7 +92,6 @@ namespace recompui
 
     protected:
         std::string_view get_type_name() override { return "ModDownloadsPanel"; }
-        void process_event(const Event &e) override;
 
     private:
         void load_discovery_mods(const std::vector<DiscoveryMod> &mods);

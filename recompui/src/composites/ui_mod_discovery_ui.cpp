@@ -65,6 +65,10 @@ namespace recompui
         thumbnail_image = context.create_element<Image>(entry_container, "");
         thumbnail_image->set_width(80.0f, Unit::Px);
         thumbnail_image->set_height(80.0f, Unit::Px);
+        thumbnail_image->set_min_width(80.0f);
+        thumbnail_image->set_min_height(80.0f);
+        thumbnail_image->set_max_width(80.0f);
+        thumbnail_image->set_max_height(80.0f);
         thumbnail_image->set_background_color(Color{190, 184, 219, 100});
         thumbnail_image->set_border_radius(4.0f);
         thumbnail_image->set_margin_right(16.0f);
@@ -161,14 +165,9 @@ namespace recompui
         queue_update();
     }
 
-    void ModDiscoveryEntry::process_event(const Event &e)
-    {
-        (void)e;
-    }
-
     // Initializes the discovery modal panel and child controls.
     ModDownloadsPanel::ModDownloadsPanel(ResourceId rid, Element *parent)
-        : Element(rid, parent, Events(EventType::Update))
+        : Element(rid, parent)
     {
         ContextId context = get_current_context();
 
@@ -265,12 +264,6 @@ namespace recompui
             content_panel, ScrollDirection::Vertical);
         mod_list_container->set_flex(1.0f, 1.0f);
         mod_list_container->set_width(100.0f, Unit::Percent);
-        mod_list_container->set_scroll_callback([this]()
-                                                {
-                                                    thumbnail_viewport_dirty = true;
-                                                    thumbnail_viewport_retry_frames = 2;
-                                                    queue_update();
-                                                });
 
         Container *button_container = context.create_element<Container>(
             content_panel, FlexDirection::Row, JustifyContent::Center);
@@ -330,7 +323,6 @@ namespace recompui
             if (discovery_url.empty())
                 throw std::runtime_error("No discovery URL configured for this game");
             std::string json_data = http_fetch_string(discovery_url);
-            printf("[ModDownloads] JSON response:\n%s\n", json_data.c_str());
             std::vector<DiscoveryMod> mods = parse_discovery_json(json_data);
             fetched_mods = mods;
             load_discovery_mods(fetched_mods);
@@ -494,55 +486,6 @@ namespace recompui
             mod_entries.back()->get_download_button()->set_nav(NavDirection::Down,
                                                                close_button);
         }
-
-        thumbnail_viewport_dirty = true;
-        thumbnail_viewport_retry_frames = 3;
-        queue_update();
-    }
-
-    void ModDownloadsPanel::process_event(const Event &e)
-    {
-        if (e.type != EventType::Update)
-            return;
-
-        bool has_pending_thumbnail_loads = false;
-        for (ModDiscoveryEntry *entry : mod_entries)
-        {
-            if (entry != nullptr && entry->update_thumbnail_load(mod_list_container))
-                has_pending_thumbnail_loads = true;
-        }
-
-        if (thumbnail_viewport_dirty)
-        {
-            thumbnail_viewport_dirty = false;
-
-            constexpr size_t max_starts_per_scan = 12;
-            size_t started_this_scan = 0;
-
-            for (ModDiscoveryEntry *entry : mod_entries)
-            {
-                if (entry == nullptr)
-                    continue;
-
-                if (entry->start_thumbnail_load_if_visible(mod_list_container))
-                {
-                    started_this_scan++;
-                    has_pending_thumbnail_loads = true;
-                    if (started_this_scan >= max_starts_per_scan)
-                        break;
-                }
-            }
-
-            if (started_this_scan == 0 && thumbnail_viewport_retry_frames > 0)
-            {
-                thumbnail_viewport_retry_frames--;
-                thumbnail_viewport_dirty = true;
-                has_pending_thumbnail_loads = true;
-            }
-        }
-
-        if (has_pending_thumbnail_loads)
-            queue_update();
     }
 
     // Creates an Rml host element for the discovery modal container
@@ -559,14 +502,6 @@ namespace recompui
 
     ElementModDownloads::~ElementModDownloads() {}
 
-    struct AsyncThumbnailLoadState
-    {
-        std::mutex mutex;
-        bool completed = false;
-        bool failed = false;
-        std::vector<char> image_data;
-    };
-
 }
 
 namespace
@@ -575,7 +510,7 @@ namespace
     struct ThumbnailLoadTask
     {
         std::string url;
-        std::shared_ptr<recompui::AsyncThumbnailLoadState> state;
+        std::string thumbnail_src;
     };
 
     // Main Handler for loading thumbnails, honestly I really don't like this code and would love a refactor here
@@ -590,12 +525,11 @@ namespace
         }
 
         // Adds a thumbnail load task to the queue
-        void enqueue(const std::string &url,
-                     const std::shared_ptr<recompui::AsyncThumbnailLoadState> &state)
+        void enqueue(const std::string &url, const std::string &thumbnail_src)
         {
             {
                 std::lock_guard<std::mutex> lock(queue_mutex);
-                tasks.emplace_back(ThumbnailLoadTask{url, state});
+                tasks.emplace_back(ThumbnailLoadTask{url, thumbnail_src});
             }
             queue_cv.notify_one();
         }
@@ -651,7 +585,6 @@ namespace
                 }
 
                 std::vector<char> image_data;
-                bool failed = false;
 
                 try
                 {
@@ -659,16 +592,20 @@ namespace
                 }
                 catch (...)
                 {
-                    failed = true;
+                    continue;
                 }
 
-                if (!task.state)
-                    continue;
+                // Check if we're shutting down before touching the renderer.
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    if (stopping)
+                        return;
+                }
 
-                std::lock_guard<std::mutex> lock(task.state->mutex);
-                task.state->failed = failed || image_data.empty();
-                task.state->completed = true;
-                task.state->image_data = std::move(image_data);
+                if (!image_data.empty())
+                {
+                    recompui::queue_image_from_bytes_file(task.thumbnail_src, image_data);
+                }
             }
         }
 
@@ -710,115 +647,34 @@ namespace recompui
                 if (!image_data.empty())
                 {
                     recompui::queue_image_from_bytes_file(thumbnail_src, image_data);
-                    thumbnail_image->set_src(thumbnail_src);
                 }
+                thumbnail_image->set_src(thumbnail_src);
             }
             else
             {
                 thumbnail_image->set_src(mod_data.thumbnail_image);
             }
         }
+        else if (!mod_data.thumbnail_url.empty())
+        {
+            // Set the src immediately — the renderer will show a transparent
+            // placeholder until the real texture data arrives.
+            thumbnail_src = make_discovery_thumbnail_src(mod_data);
+            thumbnail_image->set_src(thumbnail_src);
+            begin_thumbnail_url_load();
+        }
     }
 
-    // Adds the url load to the queue
+    // Starts a background fetch for the thumbnail URL. When the data arrives,
+    // the loader worker threads push it directly to the renderer.
+    // No UI-side polling or element updates are needed.
     void ModDiscoveryEntry::begin_thumbnail_url_load()
     {
-        if (!thumbnail_load_started && !thumbnail_load_finished &&
-            !mod_data.thumbnail_url.empty())
-        {
-            thumbnail_load_started = true;
-            thumbnail_src = make_discovery_thumbnail_src(mod_data);
-            thumbnail_load_state = std::make_shared<AsyncThumbnailLoadState>();
-            DiscoveryThumbnailLoader::instance().enqueue(mod_data.thumbnail_url,
-                                                           thumbnail_load_state);
-        }
-    }
+        if (thumbnail_load_started || mod_data.thumbnail_url.empty())
+            return;
 
-    // If the thumbnail is loaded, apply it to the UI
-    bool ModDiscoveryEntry::try_apply_loaded_thumbnail()
-    {
-        if (!thumbnail_load_state)
-            return true;
-
-        std::vector<char> image_data;
-        bool completed = false;
-        bool failed = false;
-
-        {
-            std::lock_guard<std::mutex> lock(thumbnail_load_state->mutex);
-            completed = thumbnail_load_state->completed;
-            failed = thumbnail_load_state->failed;
-
-            if (completed)
-                image_data = std::move(thumbnail_load_state->image_data);
-        }
-
-        if (!completed)
-            return false;
-
-        thumbnail_load_state.reset();
-        thumbnail_load_finished = true;
-
-        if (!failed && !image_data.empty())
-        {
-            recompui::queue_image_from_bytes_file(thumbnail_src, image_data);
-            thumbnail_image->set_src(thumbnail_src);
-            thumbnail_image->queue_update();
-        }
-
-        return true;
-    }
-
-    // Checks if we need to apply a loaded thumbnail to the UI
-    bool ModDiscoveryEntry::process_thumbnail_load()
-    {
-        if (!thumbnail_load_state)
-            return false;
-
-        return !try_apply_loaded_thumbnail();
-    }
-
-    // Gets the list of mods that are visible in the current scrollbar
-    bool ModDiscoveryEntry::is_visible_in_viewport(ScrollContainer *viewport) const
-    {
-        if (viewport == nullptr)
-            return false;
-
-        const float viewport_top = viewport->get_absolute_top();
-        const float viewport_bottom = viewport_top + viewport->get_client_height();
-        const float entry_top = entry_container->get_absolute_top();
-        const float entry_bottom = entry_top + entry_container->get_client_height();
-
-        return entry_bottom >= viewport_top && entry_top <= viewport_bottom;
-    }
-
-    // Status check to validate if everythings loaded
-    bool ModDiscoveryEntry::has_thumbnail_work_remaining() const
-    {
-        return !mod_data.thumbnail_url.empty() && !thumbnail_load_finished;
-    }
-
-    // Checks if we can update the load based on the scroll position
-    bool ModDiscoveryEntry::update_thumbnail_load(ScrollContainer *viewport)
-    {
-        if (thumbnail_load_state)
-            return !try_apply_loaded_thumbnail();
-
-        return false;
-    }
-
-    // Starts the thumbnail load if we are visible in the viewport and we haven't started loading yet
-    bool ModDiscoveryEntry::start_thumbnail_load_if_visible(
-        ScrollContainer *viewport)
-    {
-        if (!thumbnail_load_started && has_thumbnail_work_remaining() &&
-            is_visible_in_viewport(viewport))
-        {
-            begin_thumbnail_url_load();
-            return true;
-        }
-
-        return false;
+        thumbnail_load_started = true;
+        DiscoveryThumbnailLoader::instance().enqueue(mod_data.thumbnail_url, thumbnail_src);
     }
 
 }
