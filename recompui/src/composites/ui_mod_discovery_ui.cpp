@@ -6,34 +6,9 @@
 
 #include <algorithm>
 #include <cctype>
-#include <condition_variable>
-#include <deque>
-#include <mutex>
 #include <thread>
 
 extern std::vector<recomp::GameEntry> supported_games;
-
-namespace
-{
-    std::string to_lower_copy(std::string value)
-    {
-        std::transform(value.begin(), value.end(), value.begin(),
-                       [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        return value;
-    }
-
-    bool mod_name_matches_query(const recompui::DiscoveryMod &mod,
-                                const std::string &query)
-    {
-        if (query.empty())
-            return true;
-
-        const std::string lower_name = to_lower_copy(mod.name);
-        const std::string lower_query = to_lower_copy(query);
-        return lower_name.find(lower_query) != std::string::npos;
-    }
-} // namespace
 
 namespace recompui
 {
@@ -418,19 +393,26 @@ namespace recompui
         std::string current_game_id =
             supported_games.empty() ? "" : supported_games[0].mod_game_id;
 
+        auto to_lower = [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return s;
+        };
+
         std::vector<DiscoveryMod> filtered_mods;
         for (const auto &mod : mods)
         {
             if ((mod.game_id.empty() || mod.game_id == current_game_id) &&
-                mod_name_matches_query(mod, name_search_query))
+                (name_search_query.empty() ||
+                 to_lower(mod.name).find(to_lower(name_search_query)) != std::string::npos))
                 filtered_mods.push_back(mod);
         }
 
         std::sort(filtered_mods.begin(), filtered_mods.end(),
-                  [this](const DiscoveryMod &a, const DiscoveryMod &b)
+                  [this, &to_lower](const DiscoveryMod &a, const DiscoveryMod &b)
                   {
-                      const std::string a_lower = to_lower_copy(a.name);
-                      const std::string b_lower = to_lower_copy(b.name);
+                      const std::string a_lower = to_lower(a.name);
+                      const std::string b_lower = to_lower(b.name);
                       if (a_lower == b_lower)
                           return sort_name_ascending ? (a.name < b.name)
                                                      : (a.name > b.name);
@@ -502,135 +484,6 @@ namespace recompui
 
     ElementModDownloads::~ElementModDownloads() {}
 
-}
-
-namespace
-{
-    // Moves the thumbnail loading work off the main ui so we can buffer ui updates to not kill out the UI as bad
-    struct ThumbnailLoadTask
-    {
-        std::string url;
-        std::string thumbnail_src;
-    };
-
-    // Main Handler for loading thumbnails, honestly I really don't like this code and would love a refactor here
-    class DiscoveryThumbnailLoader
-    {
-    public:
-        // Gets the instance
-        static DiscoveryThumbnailLoader &instance()
-        {
-            static DiscoveryThumbnailLoader loader;
-            return loader;
-        }
-
-        // Adds a thumbnail load task to the queue
-        void enqueue(const std::string &url, const std::string &thumbnail_src)
-        {
-            {
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                tasks.emplace_back(ThumbnailLoadTask{url, thumbnail_src});
-            }
-            queue_cv.notify_one();
-        }
-
-    private:
-        // Uses a pool of worker threads to process thumbnail load tasks in the background
-        DiscoveryThumbnailLoader()
-        {
-            unsigned int worker_count = std::thread::hardware_concurrency();
-            if (worker_count == 0)
-                worker_count = 1;
-            if (worker_count > 4)
-                worker_count = 4;
-            workers.reserve(worker_count);
-            for (unsigned int i = 0; i < worker_count; ++i)
-            {
-                workers.emplace_back([this]()
-                                     { worker_loop(); });
-            }
-        }
-
-        ~DiscoveryThumbnailLoader()
-        {
-            {
-                std::lock_guard<std::mutex> lock(queue_mutex);
-                stopping = true;
-            }
-            queue_cv.notify_all();
-
-            for (std::thread &worker : workers)
-            {
-                if (worker.joinable())
-                    worker.join();
-            }
-        }
-
-        // iterates through thumbnail loader tasks
-        void worker_loop()
-        {
-            while (true)
-            {
-                ThumbnailLoadTask task;
-                {
-                    std::unique_lock<std::mutex> lock(queue_mutex);
-                    queue_cv.wait(lock, [this]()
-                                  { return stopping || !tasks.empty(); });
-
-                    if (stopping && tasks.empty())
-                        return;
-
-                    task = std::move(tasks.front());
-                    tasks.pop_front();
-                }
-
-                std::vector<char> image_data;
-
-                try
-                {
-                    image_data = recompui::http_fetch_bytes(task.url);
-                }
-                catch (...)
-                {
-                    continue;
-                }
-
-                // Check if we're shutting down before touching the renderer.
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    if (stopping)
-                        return;
-                }
-
-                if (!image_data.empty())
-                {
-                    recompui::queue_image_from_bytes_file(task.thumbnail_src, image_data);
-                }
-            }
-        }
-
-        std::mutex queue_mutex;
-        std::condition_variable queue_cv;
-        std::deque<ThumbnailLoadTask> tasks;
-        std::vector<std::thread> workers;
-        bool stopping = false;
-    };
-    // Sets the thumbnail source using the url data
-    std::string make_discovery_thumbnail_src(
-        const recompui::DiscoveryMod &mod_data)
-    {
-        const std::string cache_key = !mod_data.id.empty()
-                                          ? mod_data.id
-                                          : (!mod_data.thumbnail_url.empty()
-                                                 ? mod_data.thumbnail_url
-                                                 : mod_data.name);
-        return "discovery_thumb_" +
-               std::to_string(std::hash<std::string>{}(cache_key));
-    }
-} // namespace
-
-namespace recompui
-{
     void ModDiscoveryEntry::init_thumbnail_image()
     {
         // if we actually have a thumbnail, check if its base64 and if we need to
@@ -642,12 +495,11 @@ namespace recompui
                     0, std::char_traits<char>::length(data_image_prefix),
                     data_image_prefix) == 0)
             {
-                thumbnail_src = make_discovery_thumbnail_src(mod_data);
+                thumbnail_src = "discovery_thumb_" + std::to_string(std::hash<std::string>{}(
+                    !mod_data.id.empty() ? mod_data.id : (!mod_data.thumbnail_url.empty() ? mod_data.thumbnail_url : mod_data.name)));
                 std::vector<char> image_data = decode_base64(mod_data.thumbnail_image);
                 if (!image_data.empty())
-                {
                     recompui::queue_image_from_bytes_file(thumbnail_src, image_data);
-                }
                 thumbnail_image->set_src(thumbnail_src);
             }
             else
@@ -659,22 +511,22 @@ namespace recompui
         {
             // Set the src immediately — the renderer will show a transparent
             // placeholder until the real texture data arrives.
-            thumbnail_src = make_discovery_thumbnail_src(mod_data);
+            thumbnail_src = "discovery_thumb_" + std::to_string(std::hash<std::string>{}(
+                !mod_data.id.empty() ? mod_data.id : (!mod_data.thumbnail_url.empty() ? mod_data.thumbnail_url : mod_data.name)));
             thumbnail_image->set_src(thumbnail_src);
-            begin_thumbnail_url_load();
+
+            std::string url = mod_data.thumbnail_url;
+            std::string src = thumbnail_src;
+            std::thread([url, src]() {
+                try
+                {
+                    auto data = recompui::http_fetch_bytes(url);
+                    if (!data.empty())
+                        recompui::queue_image_from_bytes_file(src, data);
+                }
+                catch (...) {}
+            }).detach();
         }
-    }
-
-    // Starts a background fetch for the thumbnail URL. When the data arrives,
-    // the loader worker threads push it directly to the renderer.
-    // No UI-side polling or element updates are needed.
-    void ModDiscoveryEntry::begin_thumbnail_url_load()
-    {
-        if (thumbnail_load_started || mod_data.thumbnail_url.empty())
-            return;
-
-        thumbnail_load_started = true;
-        DiscoveryThumbnailLoader::instance().enqueue(mod_data.thumbnail_url, thumbnail_src);
     }
 
 }

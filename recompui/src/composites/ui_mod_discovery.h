@@ -69,14 +69,12 @@ namespace recompui
 
     private:
         void init_thumbnail_image();
-        void begin_thumbnail_url_load();
 
         Container *entry_container = nullptr;
         Image *thumbnail_image = nullptr;
         Label *name_label = nullptr;
         Label *description_label = nullptr;
         Button *download_button = nullptr;
-        bool thumbnail_load_started = false;
         std::string thumbnail_src;
         std::function<void(const DiscoveryMod &)> download_callback;
     };
@@ -102,12 +100,7 @@ namespace recompui
         parse_discovery_json(const std::string &json_data);
         void download_file_from_url(const std::string &url,
                                     const std::string &output_path);
-        bool is_mod_installed(const DiscoveryMod &mod);
         ModInstallStatus get_mod_install_status(const DiscoveryMod &mod);
-        std::string get_installed_mod_version(const DiscoveryMod &mod);
-        bool check_dependencies_satisfiable(const DiscoveryMod &mod) const;
-        const DiscoveryMod *
-        find_discovery_mod_by_id(const std::string &mod_id) const;
         bool install_single_mod_file(const DiscoveryMod &mod,
                                      std::vector<std::string> &out_errors);
         void resolve_and_install_dependencies(

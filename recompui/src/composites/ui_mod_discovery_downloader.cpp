@@ -8,18 +8,6 @@
 namespace recompui
 {
 
-    // Gets all discovery mods where the mod id matches for the game
-    const DiscoveryMod *
-    ModDownloadsPanel::find_discovery_mod_by_id(const std::string &mod_id) const
-    {
-        for (const auto &m : fetched_mods)
-        {
-            if (m.id == mod_id)
-                return &m;
-        }
-        return nullptr;
-    }
-
     // Download and install a mod from the discovery
     bool ModDownloadsPanel::install_single_mod_file(
         const DiscoveryMod &mod, std::vector<std::string> &out_errors)
@@ -105,22 +93,21 @@ namespace recompui
             if (dep_id.empty() || visited_ids.count(dep_id))
                 continue;
 
-            DiscoveryMod dummy_dep;
-            dummy_dep.id = dep_id;
-            dummy_dep.version = required_version;
             // Check if we already have it installed, and that it satisfies the required version, if we do then we can skip trying to install it.
-            if (is_mod_installed(dummy_dep) && !required_version.empty())
+            auto installed_dep_details = recomp::mods::get_details_for_mod(dep_id);
+            if (installed_dep_details.has_value() && !required_version.empty())
             {
-                std::string installed_ver = get_installed_mod_version(dummy_dep);
-                if (!installed_ver.empty() &&
-                    compare_versions(installed_ver, required_version) >= 0)
+                std::string installed_ver = installed_dep_details->version.to_string();
+                if (!installed_ver.empty() && compare_versions(installed_ver, required_version) >= 0)
                 {
                     visited_ids.insert(dep_id);
                     continue;
                 }
             }
             // If we don't have the mod or its too old on the discovery just warn the user we can't install it.
-            const DiscoveryMod *dep_mod = find_discovery_mod_by_id(dep_id);
+            auto dep_it = std::find_if(fetched_mods.begin(), fetched_mods.end(),
+                [&](const DiscoveryMod &m) { return m.id == dep_id; });
+            const DiscoveryMod *dep_mod = (dep_it != fetched_mods.end()) ? &*dep_it : nullptr;
             if (!dep_mod)
             {
                 out_warnings.push_back(
@@ -169,6 +156,8 @@ namespace recompui
                 out_installed_deps.push_back(dep_mod->name);
 
                 for (ModDiscoveryEntry *entry : mod_entries)
+                {
+                    if (entry->mod_data.id == dep_mod->id)
                     {
                         entry->update_install_status(ModInstallStatus::Installed);
                         entry->queue_update();
@@ -177,6 +166,7 @@ namespace recompui
                 }
             }
         }
+    }
 
     // On mod download button click
     void ModDownloadsPanel::download_mod(const DiscoveryMod &mod)
@@ -204,22 +194,18 @@ namespace recompui
             std::vector<std::string> warnings;
             std::vector<std::string> dep_errors;
             std::vector<std::string> installed_deps;
-            // We're doing a bit of a double check once we reach the resolve and install step, but I'll be honest, I don't trust my own code sometimes.
-            if (!mod.dependencies.empty())
-            {
-                status_label->set_text("Resolving dependencies for " + mod.name + "...");
-                std::unordered_set<std::string> visited_ids = {mod.id};
-                resolve_and_install_dependencies(mod, visited_ids, warnings, dep_errors,
-                                                 installed_deps);
+            status_label->set_text("Resolving dependencies for " + mod.name + "...");
+            std::unordered_set<std::string> visited_ids = {mod.id};
+            resolve_and_install_dependencies(mod, visited_ids, warnings, dep_errors,
+                                             installed_deps);
 
-                if (!dep_errors.empty())
-                {
-                    std::string error_msg = "Dependency installation failed:\n";
-                    for (const auto &err : dep_errors)
-                        error_msg += "  " + err + "\n";
-                    status_label->set_text(error_msg);
-                    return;
-                }
+            if (!dep_errors.empty())
+            {
+                std::string error_msg = "Dependency installation failed:\n";
+                for (const auto &err : dep_errors)
+                    error_msg += "  " + err + "\n";
+                status_label->set_text(error_msg);
+                return;
             }
 
             if (!warnings.empty())
@@ -257,7 +243,10 @@ namespace recompui
                     continue;
                 ModInstallStatus entry_status = get_mod_install_status(entry->mod_data);
                 if (entry_status != ModInstallStatus::NotInstalled)
+                {
                     entry->update_install_status(entry_status);
+                    entry->queue_update();
+                }
             }
 
             std::string final_msg = "Successfully installed " + mod.name + "!";
@@ -284,35 +273,45 @@ namespace recompui
         }
     }
 
-    // Checks if a mod is currently installed locally.
-    bool ModDownloadsPanel::is_mod_installed(const DiscoveryMod &mod)
-    {
-        if (mod.id.empty())
-            return false;
-        return recomp::mods::get_details_for_mod(mod.id).has_value();
-    }
-
-    // Gets the installed version string for a mod identifier.
-    std::string
-    ModDownloadsPanel::get_installed_mod_version(const DiscoveryMod &mod)
-    {
-        if (mod.id.empty())
-            return {};
-        std::optional<recomp::mods::ModDetails> details =
-            recomp::mods::get_details_for_mod(mod.id);
-        return details.has_value() ? details->version.to_string() : std::string{};
-    }
-
     // Wrapper that checks all our installed mod status'
     ModInstallStatus
     ModDownloadsPanel::get_mod_install_status(const DiscoveryMod &mod)
     {
-        if (!is_mod_installed(mod))
-            return check_dependencies_satisfiable(mod)
-                       ? ModInstallStatus::NotInstalled
-                       : ModInstallStatus::MissingDependencies;
+        auto details = recomp::mods::get_details_for_mod(mod.id);
+        if (!details.has_value())
+        {
+            // Check whether all dependencies are satisfiable before declaring NotInstalled
+            bool satisfiable = true;
+            for (const std::string &dep_str : mod.dependencies)
+            {
+                auto [dep_id, required_version] = parse_dep_string(dep_str);
+                if (dep_id.empty())
+                    continue;
 
-        std::string installed_version = get_installed_mod_version(mod);
+                auto installed = recomp::mods::get_details_for_mod(dep_id);
+                if (installed.has_value())
+                {
+                    if (required_version.empty())
+                        continue;
+                    std::string inst_ver = installed->version.to_string();
+                    if (!inst_ver.empty() && compare_versions(inst_ver, required_version) >= 0)
+                        continue;
+                }
+
+                auto dep_it = std::find_if(fetched_mods.begin(), fetched_mods.end(),
+                    [&](const DiscoveryMod &m) { return m.id == dep_id; });
+                const DiscoveryMod *dep_mod = (dep_it != fetched_mods.end()) ? &*dep_it : nullptr;
+                if (!dep_mod || (!required_version.empty() && !dep_mod->version.empty() &&
+                    compare_versions(dep_mod->version, required_version) < 0))
+                {
+                    satisfiable = false;
+                    break;
+                }
+            }
+            return satisfiable ? ModInstallStatus::NotInstalled : ModInstallStatus::MissingDependencies;
+        }
+
+        std::string installed_version = details->version.to_string();
         if (installed_version.empty() || mod.version.empty())
             return ModInstallStatus::Installed;
 
@@ -322,45 +321,6 @@ namespace recompui
         if (cmp < 0)
             return ModInstallStatus::DowngradeAvailable;
         return ModInstallStatus::Installed;
-    }
-
-    // Determines whether all dependencies can be satisfied.
-    bool ModDownloadsPanel::check_dependencies_satisfiable(
-        const DiscoveryMod &mod) const
-    {
-        for (const std::string &dep_str : mod.dependencies)
-        {
-            // Validate the dependency string parses out.
-            auto [dep_id, required_version] = parse_dep_string(dep_str);
-
-            if (dep_id.empty())
-                continue;
-
-            std::optional<recomp::mods::ModDetails> installed =
-                recomp::mods::get_details_for_mod(dep_id);
-            if (installed.has_value())
-            {
-                if (required_version.empty())
-                    continue;
-
-                std::string inst_ver = installed->version.to_string();
-                if (!inst_ver.empty() &&
-                    compare_versions(inst_ver, required_version) >= 0)
-                    continue;
-            }
-
-            const DiscoveryMod *dep_mod = find_discovery_mod_by_id(dep_id);
-            if (!dep_mod)
-                return false;
-
-            if (!required_version.empty() && !dep_mod->version.empty() &&
-                compare_versions(dep_mod->version, required_version) < 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
 }
