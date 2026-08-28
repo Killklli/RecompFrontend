@@ -88,7 +88,9 @@ namespace recompui
         // For each dep that the mod has we need to actually look up if the sub mod is avaiable.
         for (const std::string &dep_str : mod.dependencies)
         {
-            auto [dep_id, required_version] = parse_dep_string(dep_str);
+            auto dep = parse_dep_string(dep_str);
+            const std::string &dep_id = dep.first;
+            const std::string &required_version = dep.second;
 
             if (dep_id.empty() || visited_ids.count(dep_id))
                 continue;
@@ -284,7 +286,9 @@ namespace recompui
             bool satisfiable = true;
             for (const std::string &dep_str : mod.dependencies)
             {
-                auto [dep_id, required_version] = parse_dep_string(dep_str);
+                auto dep = parse_dep_string(dep_str);
+                const std::string &dep_id = dep.first;
+                const std::string &required_version = dep.second;
                 if (dep_id.empty())
                     continue;
 
