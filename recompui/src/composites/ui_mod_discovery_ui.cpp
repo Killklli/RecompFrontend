@@ -335,9 +335,11 @@ namespace recompui
             if (j.empty())
                 throw std::runtime_error("JSON data is empty object");
 
-            for (auto &[mod_name, mod_info] : j.items())
+            for (auto it = j.begin(); it != j.end(); ++it)
             {
                 DiscoveryMod mod;
+                const std::string mod_name = it.key();
+                const auto &mod_info = it.value();
                 mod.name = mod_name;
 
                 auto try_get = [&](const char *key, std::string &field)
