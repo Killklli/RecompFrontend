@@ -44,7 +44,10 @@ namespace recompui
     struct DiscoveryMod
     {
         std::string name;
+        std::string description;
         std::string short_description;
+        std::vector<std::string> tags;
+        std::string authors;
         std::string file_url;
         std::string thumbnail_image;
         std::string thumbnail_url;
@@ -84,8 +87,6 @@ namespace recompui
     public:
         ModDownloadsPanel(ResourceId rid, Element *parent);
         virtual ~ModDownloadsPanel();
-        void show();
-        void hide();
         void fetch_discovery_data();
 
     protected:
@@ -109,15 +110,12 @@ namespace recompui
             std::vector<std::string> &out_errors,
             std::vector<std::string> &out_installed_deps);
 
-        Container *main_container = nullptr;
         Container *content_panel = nullptr;
         Label *title_label = nullptr;
         Label *status_label = nullptr;
         TextInput *search_input = nullptr;
         Button *sort_name_button = nullptr;
         ScrollContainer *mod_list_container = nullptr;
-        Button *refresh_button = nullptr;
-        Button *close_button = nullptr;
         std::vector<ModDiscoveryEntry *> mod_entries;
         std::vector<DiscoveryMod> fetched_mods;
         std::string name_search_query;
@@ -125,7 +123,6 @@ namespace recompui
         std::string fetch_error;
         bool thumbnail_viewport_dirty = false;
         int thumbnail_viewport_retry_frames = 0;
-        bool is_visible = false;
         bool is_loading = false;
         bool fetch_completed = false;
     };

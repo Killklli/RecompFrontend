@@ -317,12 +317,6 @@ void ModMenu::open_install_dialog() {
     });
 }
 
-void ModMenu::open_mod_downloads() {
-    if (mod_downloads_panel) {
-        mod_downloads_panel->show();
-    }
-}
-
 void ModMenu::mod_toggled(bool enabled) {
     if (active_mod_index >= 0) {
         recomp::mods::enable_mod(mod_details[active_mod_index].mod_id, enabled);
@@ -647,9 +641,6 @@ void ModMenu::process_event(const Event &e) {
         }
         if (ultramodern::is_game_started()) {
             install_mods_button->set_enabled(false);
-            if (mod_downloads_button != nullptr) {
-                mod_downloads_button->set_enabled(false);
-            }
             refresh_button->set_enabled(false);
         }
         if (active_mod_index != -1) {        
@@ -729,18 +720,10 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
         footer_container->set_border_bottom_right_radius(16.0f);
         {
             Button* configure_button = mod_details_panel->get_configure_button();
-            bool has_discovery = !get_discovery_url().empty();
 
             install_mods_button = context.create_element<Button>(footer_container, "Install Mods", recompui::ButtonStyle::Primary);
             install_mods_button->add_pressed_callback([this](){ open_install_dialog(); });
 
-            if (has_discovery) {
-                mod_downloads_button = context.create_element<Button>(footer_container, "Mod Discovery", recompui::ButtonStyle::Primary);
-                mod_downloads_button->add_pressed_callback([this](){ 
-                    printf("Mod Discovery button pressed\n");
-                    open_mod_downloads(); 
-                });
-            }
             Element* footer_spacer = context.create_element<Element>(footer_container);
             footer_spacer->set_flex(1.0f, 0.0f);
 
@@ -756,11 +739,6 @@ ModMenu::ModMenu(ResourceId rid, Element *parent) : Element(rid, parent) {
     mod_entry_floating_view->set_display(Display::None);
     mod_entry_floating_view->set_position(Position::Absolute);
     mod_entry_floating_view->set_selected(true);
-
-    // Create the mod discovery panel
-    printf("Creating mod discovery panel\n");
-    mod_downloads_panel = context.create_element<ModDownloadsPanel>(this);
-    printf("Mod discovery panel created: %p\n", mod_downloads_panel);
 
     context.close();
     create_mod_config_modal();

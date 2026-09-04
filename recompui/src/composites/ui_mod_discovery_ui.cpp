@@ -146,45 +146,23 @@ namespace recompui
     {
         ContextId context = get_current_context();
 
-        set_display(Display::None);
-        set_position(Position::Absolute);
-        set_top(0.0f, Unit::Px);
-        set_left(0.0f, Unit::Px);
+        set_display(Display::Flex);
+        set_flex_direction(FlexDirection::Column);
         set_width(100.0f, Unit::Percent);
         set_height(100.0f, Unit::Percent);
-        set_background_color(Color{0, 0, 0, 200});
-
-        main_container = context.create_element<Container>(
-            this, FlexDirection::Column, JustifyContent::Center);
-        main_container->set_align_items(AlignItems::Center);
-        main_container->set_width(100.0f, Unit::Percent);
-        main_container->set_height(100.0f, Unit::Percent);
 
         content_panel = context.create_element<Container>(
-            main_container, FlexDirection::Column, JustifyContent::FlexStart);
-        content_panel->set_width(90.0f, Unit::Percent);
-        content_panel->set_height(85.0f, Unit::Percent);
-        content_panel->set_background_color(Color{26, 24, 32, 255});
-        content_panel->set_border_radius(16.0f);
+            this, FlexDirection::Column, JustifyContent::FlexStart);
+        content_panel->set_width(100.0f, Unit::Percent);
+        content_panel->set_height(100.0f, Unit::Percent);
         content_panel->set_padding(30.0f);
         content_panel->set_gap(20.0f);
-        content_panel->set_border_width(2.0f);
-        content_panel->set_border_color(Color{242, 242, 242, 64});
 
         Container *header_container = context.create_element<Container>(
             content_panel, FlexDirection::Row, JustifyContent::SpaceBetween);
         header_container->set_align_items(AlignItems::Center);
         header_container->set_width(100.0f, Unit::Percent);
         header_container->set_margin_bottom(12.0f);
-
-        title_label = context.create_element<Label>(
-            header_container, "Mod Discovery", LabelStyle::Large);
-        title_label->set_color(Color{242, 242, 242, 255});
-
-        refresh_button = context.create_element<Button>(header_container, "Refresh",
-                                                        ButtonStyle::Secondary);
-        refresh_button->add_pressed_callback([this]()
-                                             { fetch_discovery_data(); });
 
         // Filter row: search label + input on the left, sort button on the right
         Container *filter_container = context.create_element<Container>(
@@ -240,46 +218,13 @@ namespace recompui
         mod_list_container->set_flex(1.0f, 1.0f);
         mod_list_container->set_width(100.0f, Unit::Percent);
 
-        Container *button_container = context.create_element<Container>(
-            content_panel, FlexDirection::Row, JustifyContent::Center);
-        button_container->set_align_items(AlignItems::Center);
-        close_button = context.create_element<Button>(button_container, "Close",
-                                                      ButtonStyle::Secondary);
-        close_button->add_pressed_callback([this]()
-                                           { hide(); });
-
-        close_button->set_nav(NavDirection::Up, refresh_button);
-        close_button->set_nav(NavDirection::Down, refresh_button);
-        close_button->set_nav_none(NavDirection::Left);
-        close_button->set_nav_none(NavDirection::Right);
-        refresh_button->set_nav(NavDirection::Up, sort_name_button);
-        refresh_button->set_nav(NavDirection::Down, close_button);
-        refresh_button->set_nav_none(NavDirection::Left);
-        refresh_button->set_nav_none(NavDirection::Right);
         sort_name_button->set_nav(NavDirection::Up, search_input);
-        sort_name_button->set_nav(NavDirection::Down, refresh_button);
-        sort_name_button->set_nav(NavDirection::Left, search_input);
-        sort_name_button->set_nav(NavDirection::Right, refresh_button);
         search_input->set_nav(NavDirection::Down, sort_name_button);
+
+        fetch_discovery_data();
     }
 
     ModDownloadsPanel::~ModDownloadsPanel() {}
-
-    // Shows the modal panel and triggers a data refresh.
-    void ModDownloadsPanel::show()
-    {
-        set_display(Display::Flex);
-        is_visible = true;
-        fetch_discovery_data();
-        close_button->focus();
-    }
-
-    // Hides the modal panel.
-    void ModDownloadsPanel::hide()
-    {
-        set_display(Display::None);
-        is_visible = false;
-    }
 
     // Fetches discovery JSON and refreshes rendered entries.
     void ModDownloadsPanel::fetch_discovery_data()
@@ -348,7 +293,9 @@ namespace recompui
                         field = mod_info[key];
                 };
 
+                try_get("description", mod.description);
                 try_get("short_description", mod.short_description);
+                try_get("authors", mod.authors);
                 try_get("file_url", mod.file_url);
                 try_get("thumbnail_image", mod.thumbnail_image);
                 try_get("thumbnail_url", mod.thumbnail_url);
@@ -361,6 +308,12 @@ namespace recompui
                 {
                     for (const auto &dep : mod_info["dependencies"])
                         mod.dependencies.push_back(dep);
+                }
+
+                if (mod_info.contains("tags") && mod_info["tags"].is_array())
+                {
+                    for (const auto &tag : mod_info["tags"])
+                        mod.tags.push_back(tag);
                 }
 
                 mods.push_back(mod);
@@ -461,14 +414,6 @@ namespace recompui
                                        std::string(e.what()));
                 break;
             }
-        }
-
-        if (!mod_entries.empty())
-        {
-            mod_entries.front()->get_download_button()->set_nav(NavDirection::Up,
-                                                                refresh_button);
-            mod_entries.back()->get_download_button()->set_nav(NavDirection::Down,
-                                                               close_button);
         }
     }
 
